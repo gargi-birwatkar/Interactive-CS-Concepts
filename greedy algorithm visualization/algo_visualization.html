@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shortest Path Visualization</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f3f7;
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column; align-items: center;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1 {
+    color: #34495e;
+    margin: 1rem 0 0.5rem 0;
+  }
+  #controls {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    padding: 1rem 2rem;
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 900px;
+    width: 100%;
+  }
+  select, button {
+    padding: 0.5rem 1rem;
+    font-size: 16px;
+    border-radius: 6px;
+    border: 2px solid #2980b9;
+    background: #3498db;
+    color: white;
+    cursor: pointer;
+    transition: background 0.3s, border-color 0.3s;
+    min-width: 140px;
+    text-align: center;
+  }
+  select:focus, button:focus {
+    outline: none;
+    border-color: #e67e22;
+  }
+  select:hover, button:hover:not(:disabled) {
+    background: #2980b9;
+    border-color: #1f6391;
+  }
+  button:disabled {
+    background: #bdc3c7;
+    border-color: #95a5a6;
+    cursor: default;
+  }
+  #canvas-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    padding: 15px;
+    margin-bottom: 1rem;
+    max-width: 900px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  canvas {
+    background: #ecf0f1;
+    border-radius: 10px;
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.05);
+    user-select: none;
+  }
+  #status {
+    max-width: 900px;
+    width: 100%;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.07);
+    padding: 1rem 1.5rem;
+    color: #34495e;
+    font-size: 18px;
+    min-height: 50px;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  #data-structures {
+    max-width: 900px;
+    width: 100%;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.07);
+    padding: 1rem 1.5rem;
+    color: #2c3e50;
+    font-size: 15px;
+    font-family: monospace;
+    min-height: 140px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    user-select: text;
+  }
+  @media (max-width: 600px) {
+    #controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    select, button {
+      min-width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+<h1>Shortest Path Algorithm Visualization</h1>
+
+<div id="controls">
+  <select id="algorithm">
+    <option value="bfs">Breadth-First Search (BFS)</option>
+    <option value="dijkstra">Dijkstra's Algorithm</option>
+    <option value="bellmanford">Bellman-Ford Algorithm</option>
+    <option value="astar">A* Algorithm</option>
+  </select>
+
+  <select id="start-node"></select>
+  <select id="end-node"></select>
+
+  <select id="speed">
+    <option value="slow">Slow</option>
+    <option value="medium" selected>Medium</option>
+    <option value="fast">Fast</option>
+    <option value="step">Step-by-step (Click Step)</option>
+  </select>
+
+  <button id="run-btn">Run</button>
+  <button id="step-btn" disabled>Step</button>
+  <button id="reset-btn" disabled>Reset</button>
+</div>
+
+<div id="canvas-container">
+  <canvas id="map" width="850" height="550"></canvas>
+</div>
+
+<div id="status">Select algorithm and nodes, then click Run.</div>
+<pre id="data-structures">No algorithm running.</pre>
+
+<script>
+  // Graph nodes: shops and houses with coordinates
+  const nodes = {
+    A: { x: 120, y: 90, type: 'shop' },
+    B: { x: 270, y: 60, type: 'shop' },
+    C: { x: 430, y: 100, type: 'house' },
+    D: { x: 600, y: 120, type: 'shop' },
+    E: { x: 750, y: 90, type: 'house' },
+    F: { x: 150, y: 280, type: 'shop' },
+    G: { x: 350, y: 250, type: 'house' },
+    H: { x: 520, y: 220, type: 'shop' },
+    I: { x: 700, y: 250, type: 'shop' },
+    J: { x: 240, y: 430, type: 'house' },
+    K: { x: 410, y: 400, type: 'shop' },
+    L: { x: 590, y: 430, type: 'house' },
+  };
+
+  // Edges with weights in meters
+  const edges = {
+    A: [{ node: 'B', weight: 150 }, { node: 'F', weight: 200 }],
+    B: [{ node: 'A', weight: 150 }, { node: 'C', weight: 170 }, { node: 'G', weight: 250 }],
+    C: [{ node: 'B', weight: 170 }, { node: 'D', weight: 180 }],
+    D: [{ node: 'C', weight: 180 }, { node: 'E', weight: 200 }, { node: 'H', weight: 190 }],
+    E: [{ node: 'D', weight: 200 }, { node: 'I', weight: 210 }],
+    F: [{ node: 'A', weight: 200 }, { node: 'G', weight: 180 }, { node: 'J', weight: 230 }],
+    G: [{ node: 'F', weight: 180 }, { node: 'B', weight: 250 }, { node: 'H', weight: 170 }, { node: 'K', weight: 210 }],
+    H: [{ node: 'G', weight: 170 }, { node: 'D', weight: 190 }, { node: 'I', weight: 160 }, { node: 'L', weight: 220 }],
+    I: [{ node: 'E', weight: 210 }, { node: 'H', weight: 160 }],
+    J: [{ node: 'F', weight: 230 }, { node: 'K', weight: 190 }],
+    K: [{ node: 'J', weight: 190 }, { node: 'G', weight: 210 }, { node: 'L', weight: 200 }],
+    L: [{ node: 'K', weight: 200 }, { node: 'H', weight: 220 }],
+  };
+
+  // Canvas and UI elements
+  const canvas = document.getElementById('map');
+  const ctx = canvas.getContext('2d');
+  const algorithmSelect = document.getElementById('algorithm');
+  const startSelect = document.getElementById('start-node');
+  const endSelect = document.getElementById('end-node');
+  const speedSelect = document.getElementById('speed');
+  const runBtn = document.getElementById('run-btn');
+  const stepBtn = document.getElementById('step-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const statusDiv = document.getElementById('status');
+  const dsDiv = document.getElementById('data-structures');
+
+  // Populate start/end dropdowns with node labels
+  function populateNodeSelectors() {
+    startSelect.innerHTML = '';
+    endSelect.innerHTML = '';
+    for (const node in nodes) {
+      const option1 = document.createElement('option');
+      option1.value = node;
+      option1.textContent = node;
+      const option2 = option1.cloneNode(true);
+      startSelect.appendChild(option1);
+      endSelect.appendChild(option2);
+    }
+    startSelect.value = 'A';
+    endSelect.value = 'L';
+  }
+  populateNodeSelectors();
+
+  // Utility delay for animations
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Heuristic function for A*: Euclidean distance
+  function heuristic(n, goal) {
+    const dx = nodes[n].x - nodes[goal].x;
+    const dy = nodes[n].y - nodes[goal].y;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+
+  // Compute heuristic for all nodes to goal
+  function computeHeuristics(goal) {
+    const hVals = {};
+    for (const node in nodes) {
+      hVals[node] = heuristic(node, goal);
+    }
+    return hVals;
+  }
+
+  // Drawing helpers
+
+  // Draw rounded rectangle for houses
+  function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+    if (typeof radius === 'number') {
+      radius = {tl: radius, tr: radius, br: radius, bl: radius};
+    } else {
+      const defaultRadius = {tl:0, tr:0, br:0, bl:0};
+      for (let side in defaultRadius) radius[side] = radius[side] || defaultRadius[side];
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + radius.tl, y);
+    ctx.lineTo(x + width - radius.tr, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+    ctx.lineTo(x + width, y + height - radius.br);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+    ctx.lineTo(x + radius.bl, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+    ctx.lineTo(x, y + radius.tl);
+    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // Draw circle for shops
+  function drawShop(x, y, radius = 20, fill = '#2980b9', stroke = '#1f6391') {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2*Math.PI);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+
+  // Draw house as rounded square
+  function drawHouse(x, y, size = 40, fill = '#e67e22', stroke = '#c96f1d') {
+    roundRect(ctx, x - size/2, y - size/2, size, size, 10, fill, stroke);
+  }
+
+  // Draw edge lines with weight bubbles
+  function drawEdge(n1, n2, weight, highlight = false) {
+    const from = nodes[n1];
+    const to = nodes[n2];
+    ctx.beginPath();
+    ctx.lineWidth = highlight ? 5 : 2;
+    ctx.strokeStyle = highlight ? '#e74c3c' : '#7f8c8d';
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+
+    // Draw weight bubble near midpoint
+    const mx = (from.x + to.x)/2;
+    const my = (from.y + to.y)/2;
+
+    ctx.beginPath();
+    ctx.fillStyle = highlight ? '#e74c3c' : '#bdc3c7';
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 1;
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.arc(mx, my, 15, 0, 2*Math.PI);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.fillStyle = highlight ? 'white' : '#2c3e50';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(weight + 'm', mx, my);
+  }
+
+  // Draw a single node (shop or house)
+  function drawNode(nodeId, highlight = false, visited = false, frontier = false, onPath = false, hValue = null) {
+    const node = nodes[nodeId];
+    const x = node.x;
+    const y = node.y;
+
+    // Node style depending on type and states
+    let fillColor = node.type === 'shop' ? '#2980b9' : '#e67e22';
+    let strokeColor = node.type === 'shop' ? '#1f6391' : '#c96f1d';
+
+    if (onPath) {
+      fillColor = '#e74c3c';
+      strokeColor = '#c0392b';
+    } else if (frontier) {
+      fillColor = '#f39c12';
+      strokeColor = '#d35400';
+    } else if (visited) {
+      fillColor = '#95a5a6';
+      strokeColor = '#7f8c8d';
+    }
+
+    // Draw node shape
+    if (node.type === 'shop') {
+      drawShop(x, y, 22, fillColor, strokeColor);
+    } else {
+      drawHouse(x, y, 44, fillColor, strokeColor);
+    }
+
+    // Draw node label
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(nodeId, x, y);
+
+    // If heuristic value present (A*), show it below node
+    if (hValue !== null) {
+      ctx.fillStyle = '#2c3e50';
+      ctx.font = '14px monospace';
+      ctx.fillText(`h=${hValue.toFixed(1)}`, x, y + 35);
+    }
+  }
+
+  // Draw full graph, with highlights and path
+  function drawGraph({ visited = [], frontier = [], path = [], current = null, hValues = null }) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw edges first
+    for (const from in edges) {
+      for (const edge of edges[from]) {
+        // Highlight edges in final path
+        let highlight = false;
+        for (let i = 0; i < path.length-1; i++) {
+          if ((path[i] === from && path[i+1] === edge.node) || (path[i] === edge.node && path[i+1] === from)) {
+            highlight = true;
+            break;
+          }
+        }
+        drawEdge(from, edge.node, edge.weight, highlight);
+      }
+    }
+
+    // Draw nodes
+    for (const node in nodes) {
+      drawNode(
+        node,
+        false,
+        visited.includes(node),
+        frontier.includes(node),
+        path.includes(node),
+        hValues ? hValues[node] : null
+      );
+    }
+
+    // Highlight current node with a glowing ring
+    if (current) {
+      const n = nodes[current];
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 28, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 5;
+      ctx.shadowColor = '#f39c12';
+      ctx.shadowBlur = 15;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // Variables for controlling animation and algorithm state
+  let algorithm = null;
+  let startNode = null;
+  let endNode = null;
+  let speed = 300;  // default medium speed ms delay
+  let stepMode = false;
+  let intervalId = null;
+  let iterator = null;
+  let isRunning = false;
+
+  // Adjust speed from dropdown
+  function updateSpeed() {
+    const val = speedSelect.value;
+    if (val === 'slow') speed = 700;
+    else if (val === 'medium') speed = 300;
+    else if (val === 'fast') speed = 100;
+    else if (val === 'step') speed = 0;
+  }
+  speedSelect.addEventListener('change', updateSpeed);
+  updateSpeed();
+
+  // BFS Algorithm generator
+  function* bfs(start, goal) {
+    let queue = [start];
+    let visited = new Set();
+    let prev = {};
+    let frontier = new Set(queue);
+
+    yield { queue, visited: new Set(visited), frontier: new Set(frontier), currentNode: null };
+
+    while (queue.length > 0) {
+      let current = queue.shift();
+      frontier.delete(current);
+      visited.add(current);
+
+      yield { queue: [...queue], visited: new Set(visited), frontier: new Set(frontier), currentNode: current };
+
+      if (current === goal) {
+        // Reconstruct path
+        let path = [];
+        let crawl = goal;
+        while (crawl !== undefined) {
+          path.unshift(crawl);
+          crawl = prev[crawl];
+        }
+        yield { visited: [...visited], frontier: [], path, currentNode: null };
+        return;
+      }
+
+      for (const edge of edges[current]) {
+        if (!visited.has(edge.node) && !frontier.has(edge.node)) {
+          queue.push(edge.node);
+          frontier.add(edge.node);
+          prev[edge.node] = current;
+        }
+      }
+    }
+    yield { visited: [...visited], frontier: [], path: [], currentNode: null };
+  }
+
+  // Dijkstra's algorithm generator
+  function* dijkstra(start, goal) {
+    let dist = {};
+    let prev = {};
+    let visited = new Set();
+    let frontier = new Set();
+
+    for (const node in nodes) {
+      dist[node] = Infinity;
+      prev[node] = null;
+    }
+    dist[start] = 0;
+
+    while (true) {
+      // Pick node with smallest dist not visited
+      let current = null;
+      let minDist = Infinity;
+      for (const node in dist) {
+        if (!visited.has(node) && dist[node] < minDist) {
+          minDist = dist[node];
+          current = node;
+        }
+      }
+
+      if (current === null) break; // done
+      if (current === goal) {
+        // reconstruct path
+        let path = [];
+        let crawl = goal;
+        while (crawl) {
+          path.unshift(crawl);
+          crawl = prev[crawl];
+        }
+        yield { dist, prev, visited: new Set(visited), frontier: new Set(), currentNode: null, path };
+        return;
+      }
+
+      visited.add(current);
+      yield { dist, prev, visited: new Set(visited), frontier: new Set(frontier), currentNode: current };
+
+      for (const edge of edges[current]) {
+        if (!visited.has(edge.node)) {
+          let alt = dist[current] + edge.weight;
+          if (alt < dist[edge.node]) {
+            dist[edge.node] = alt;
+            prev[edge.node] = current;
+            frontier.add(edge.node);
+          }
+        }
+      }
+    }
+
+    yield { dist, prev, visited: new Set(visited), frontier: new Set(), currentNode: null, path: [] };
+  }
+
+  // Bellman-Ford algorithm generator
+  function* bellmanFord(start, goal) {
+    let dist = {};
+    let prev = {};
+    for (const node in nodes) {
+      dist[node] = Infinity;
+      prev[node] = null;
+    }
+    dist[start] = 0;
+
+    const nodesArr = Object.keys(nodes);
+    const edgesList = [];
+    for (const from in edges) {
+      for (const edge of edges[from]) {
+        edgesList.push({from, to: edge.node, weight: edge.weight});
+      }
+    }
+
+    let updated;
+    for (let i = 0; i < nodesArr.length -1; i++) {
+      updated = false;
+      for (const edge of edgesList) {
+        if (dist[edge.from] + edge.weight < dist[edge.to]) {
+          dist[edge.to] = dist[edge.from] + edge.weight;
+          prev[edge.to] = edge.from;
+          updated = true;
+        }
+        yield { dist, prev, visited: new Set(), frontier: new Set([edge.to]), currentNode: edge.to };
+      }
+      if (!updated) break;
+    }
+
+    // Check for negative-weight cycles (not expected here)
+    for (const edge of edgesList) {
+      if (dist[edge.from] + edge.weight < dist[edge.to]) {
+        statusDiv.textContent = 'Graph contains a negative-weight cycle!';
+        break;
+      }
+    }
+
+    if (dist[goal] === Infinity) {
+      yield { dist, prev, visited: new Set(), frontier: new Set(), currentNode: null, path: [] };
+      return;
+    }
+
+    // reconstruct path
+    let path = [];
+    let crawl = goal;
+    while (crawl) {
+      path.unshift(crawl);
+      crawl = prev[crawl];
+    }
+    yield { dist, prev, visited: new Set(), frontier: new Set(), currentNode: null, path };
+  }
+
+  // A* algorithm generator
+  function* astar(start, goal) {
+    const hValues = computeHeuristics(goal);
+    let openSet = new Set([start]);
+    let cameFrom = {};
+    let gScore = {};
+    let fScore = {};
+    const allNodes = Object.keys(nodes);
+
+    for (const node of allNodes) {
+      gScore[node] = Infinity;
+      fScore[node] = Infinity;
+    }
+    gScore[start] = 0;
+    fScore[start] = hValues[start];
+
+    while (openSet.size > 0) {
+      // Node in openSet with lowest fScore
+      let current = null;
+      let minF = Infinity;
+      for (const node of openSet) {
+        if (fScore[node] < minF) {
+          minF = fScore[node];
+          current = node;
+        }
+      }
+
+      yield { openSet: new Set(openSet), cameFrom, gScore, fScore, currentNode: current, hValues };
+
+      if (current === goal) {
+        // reconstruct path
+        let path = [];
+        let crawl = goal;
+        while (crawl) {
+          path.unshift(crawl);
+          crawl = cameFrom[crawl];
+        }
+        yield { openSet: new Set(), cameFrom, gScore, fScore, currentNode: null, path, hValues };
+        return;
+      }
+
+      openSet.delete(current);
+
+      for (const edge of edges[current]) {
+        let tentative_gScore = gScore[current] + edge.weight;
+        if (tentative_gScore < gScore[edge.node]) {
+          cameFrom[edge.node] = current;
+          gScore[edge.node] = tentative_gScore;
+          fScore[edge.node] = tentative_gScore + hValues[edge.node];
+          if (!openSet.has(edge.node)) {
+            openSet.add(edge.node);
+          }
+        }
+      }
+    }
+
+    yield { openSet: new Set(), cameFrom, gScore, fScore, currentNode: null, path: [] };
+  }
+
+  // Format data structures nicely for display
+  function formatDataStructures(data) {
+    let text = '';
+    if (algorithmSelect.value === 'bfs') {
+      text += `Queue: [${data.queue ? data.queue.join(', ') : ''}]\n`;
+      text += `Visited: [${data.visited ? [...data.visited].join(', ') : ''}]\n`;
+      text += `Frontier: [${data.frontier ? [...data.frontier].join(', ') : ''}]\n`;
+      if (data.currentNode) text += `Current: ${data.currentNode}\n`;
+      if (data.path && data.path.length > 0) text += `Path: ${data.path.join(' → ')}\n`;
+    } else if (algorithmSelect.value === 'dijkstra') {
+      text += 'Distances:\n';
+      for (const node in data.dist) {
+        text += `  ${node}: ${data.dist[node] === Infinity ? '∞' : data.dist[node]}\n`;
+      }
+      text += 'Visited: [' + [...data.visited].join(', ') + ']\n';
+      text += 'Frontier: [' + [...data.frontier].join(', ') + ']\n';
+      if (data.currentNode) text += `Current: ${data.currentNode}\n`;
+      if (data.path && data.path.length > 0) text += 'Path: ' + data.path.join(' → ') + '\n';
+    } else if (algorithmSelect.value === 'bellmanford') {
+      text += 'Distances:\n';
+      for (const node in data.dist) {
+        text += `  ${node}: ${data.dist[node] === Infinity ? '∞' : data.dist[node]}\n`;
+      }
+      if (data.currentNode) text += `Relaxing edge to: ${data.currentNode}\n`;
+      if (data.path && data.path.length > 0) text += 'Path: ' + data.path.join(' → ') + '\n';
+    } else if (algorithmSelect.value === 'astar') {
+      text += 'gScores:\n';
+      for (const node in data.gScore) {
+        text += `  ${node}: ${data.gScore[node] === Infinity ? '∞' : data.gScore[node].toFixed(1)}\n`;
+      }
+      text += 'fScores:\n';
+      for (const node in data.fScore) {
+        text += `  ${node}: ${data.fScore[node] === Infinity ? '∞' : data.fScore[node].toFixed(1)}\n`;
+      }
+      text += 'Open Set: [' + [...data.openSet].join(', ') + ']\n';
+      if (data.currentNode) text += `Current: ${data.currentNode}\n`;
+      if (data.path && data.path.length > 0) text += 'Path: ' + data.path.join(' → ') + '\n';
+    }
+    return text;
+  }
+
+  // Run one step of the algorithm visualization
+  async function runStep() {
+    const { value, done } = iterator.next();
+    if (done) {
+      isRunning = false;
+      runBtn.disabled = false;
+      stepBtn.disabled = true;
+      resetBtn.disabled = false;
+      statusDiv.textContent = 'Algorithm finished.';
+      dsDiv.textContent = formatDataStructures(value);
+      drawGraph({
+        visited: value.visited ? [...value.visited] : [],
+        frontier: value.frontier ? [...value.frontier] : [],
+        path: value.path || [],
+        current: null,
+        hValues: value.hValues || null
+      });
+      return false;
+    }
+
+    // Show status message
+    let message = `Algorithm running...`;
+    if (value.currentNode) message = `Visiting node ${value.currentNode}`;
+    else if (value.path && value.path.length > 0) message = `Path found: ${value.path.join(' → ')}`;
+    statusDiv.textContent = message;
+
+    // Update data structures panel
+    dsDiv.textContent = formatDataStructures(value);
+
+    // Draw graph with highlights
+    let visitedArr = value.visited ? [...value.visited] : [];
+    let frontierArr = value.frontier ? [...value.frontier] : [];
+    if (algorithmSelect.value === 'astar') {
+      frontierArr = value.openSet ? [...value.openSet] : [];
+    }
+    drawGraph({
+      visited: visitedArr,
+      frontier: frontierArr,
+      path: value.path || [],
+      current: value.currentNode,
+      hValues: value.hValues || null
+    });
+
+    return true;
+  }
+
+  // Controls logic
+  runBtn.addEventListener('click', () => {
+    if (isRunning) return;
+    startNode = startSelect.value;
+    endNode = endSelect.value;
+    if (startNode === endNode) {
+      statusDiv.textContent = 'Start and End nodes must be different.';
+      return;
+    }
+    isRunning = true;
+    runBtn.disabled = true;
+    resetBtn.disabled = true;
+    stepBtn.disabled = (speed !== 0);
+    algorithm = algorithmSelect.value;
+    updateSpeed();
+
+    // Create algorithm generator
+    if (algorithm === 'bfs') iterator = bfs(startNode, endNode);
+    else if (algorithm === 'dijkstra') iterator = dijkstra(startNode, endNode);
+    else if (algorithm === 'bellmanford') iterator = bellmanFord(startNode, endNode);
+    else if (algorithm === 'astar') iterator = astar(startNode, endNode);
+    else {
+      statusDiv.textContent = 'Unknown algorithm selected.';
+      isRunning = false;
+      runBtn.disabled = false;
+      return;
+    }
+
+    // Start animation or await steps
+    if (speed === 0) {
+      // Step-by-step mode
+      stepBtn.disabled = false;
+      runBtn.disabled = true;
+      resetBtn.disabled = true;
+      runStep(); // run first step
+    } else {
+      stepBtn.disabled = true;
+      resetBtn.disabled = true;
+      (async () => {
+        while (isRunning) {
+          const cont = await runStep();
+          if (!cont) break;
+          await delay(speed);
+        }
+        resetBtn.disabled = false;
+      })();
+    }
+  });
+
+  stepBtn.addEventListener('click', async () => {
+    if (!isRunning) return;
+    const cont = await runStep();
+    if (!cont) {
+      stepBtn.disabled = true;
+      resetBtn.disabled = false;
+      runBtn.disabled = false;
+      isRunning = false;
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    isRunning = false;
+    runBtn.disabled = false;
+    stepBtn.disabled = true;
+    resetBtn.disabled = true;
+    statusDiv.textContent = 'Select algorithm and nodes, then click Run.';
+    dsDiv.textContent = 'No algorithm running.';
+    drawGraph({});
+  });
+
+  // Initialize with graph drawn
+  drawGraph({});
+
+</script>
+
+</body>
+</html>
