@@ -17,7 +17,7 @@ Since these are pure HTML/CSS/JavaScript simulations, no build process or server
 
 1.  **Clone the repository:**
     ```bash
-    git clone 
+    git clone https://github.com/gargi-birwatkar/Interactive-CS-Concepts.git
     ```
 2.  **Run a Simulation:**
     Navigate to the relevant folder and open the main `.html` file in your web browser.
