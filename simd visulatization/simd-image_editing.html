@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SIMD Corrected Bus Highlight</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        #main-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        #control-panel {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 3px solid #0056b3;
+            border-radius: 10px;
+            background: #e6f0ff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 10px 15px;
+            margin: 0 5px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .btn-fast { background-color: #3cb371; color: white; }
+        .btn-step { background-color: #ffaa00; color: #333; }
+        .btn-next { background-color: #007bff; color: white; display: none; }
+        .btn-reset { background-color: #dc3545; color: white; }
+        
+        /* --- Architecture Diagram Styles (Left Column) --- */
+        #architecture-column {
+            width: 45%;
+            padding: 10px;
+            border-right: 2px solid #ccc;
+        }
+        .unit-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 380px;
+        }
+        .unit, .memory-module {
+            border: 2px solid black;
+            padding: 10px;
+            margin: 5px;
+            text-align: center;
+            font-weight: bold;
+            transition: background-color 0.1s;
+            z-index: 2;
+        }
+        .control-unit { position: absolute; top: 20px; left: 0; background-color: #fdd; }
+        .processor-unit { width: 150px; margin-top: 10px; background-color: #ffd; }
+        .memory-module { background-color: #ddf; width: 150px; margin: 5px; } 
+
+        /* --- CORE ALIGNMENT FIXES --- */
+        .shared-memory-container {
+            position: absolute;
+            top: 20px;
+            right: 0;
+            border: 3px solid #888;
+            background-color: #f0f0ff;
+            padding: 10px;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding-top: 50px; 
+        }
+        #MM1 { margin-top: 0px; margin-bottom: 20px; } 
+        #MM2 { margin-bottom: 20px; }
+        #MM3 { margin-bottom: 0px; }
+        /* ---------------------------------------------------- */
+
+        .pu-group {
+            position: absolute;
+            top: 100px;
+            left: 150px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Bus Lines --- */
+        .bus-line {
+            position: absolute;
+            z-index: 1;
+            transition: border-color 0.5s;
+        }
+        /* 1. Instruction Bus (CU -> All PUs) */
+        #bus-instruction-vertical { 
+            top: 60px; 
+            left: 100px; 
+            height: 250px; 
+            border-left: 10px dashed #666;
+            transition: border-left-color 0.3s; /* Transition for vertical dashed line */
+        }
+        #bus-instruction-h1 { top: 120px; left: 100px; width: 50px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        #bus-instruction-h2 { top: 180px; left: 100px; width: 50px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        #bus-instruction-h3 { top: 240px; left: 100px; width: 50px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        
+        /* 2. Data Buses (PUs <-> MMs) */
+        #bus-data-1 { top: 120px; left: 300px; width: 130px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        #bus-data-2 { top: 180px; left: 300px; width: 130px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        #bus-data-3 { top: 240px; left: 300px; width: 130px; border-top: 10px dashed #666; transition: border-top-color 0.3s;}
+        
+        /* Highlight Classes - SPECIFIC FIX */
+        .highlight { background-color: #28a745 !important; box-shadow: 0 0 10px #28a745; }
+        /* Vertical Bus: Use border-left for the vertical line */
+        .highlight-bus-v { border-left-color: red !important; } 
+        /* Horizontal Bus: Use border-top for horizontal lines */
+        .highlight-bus-h { border-top-color: red !important; } 
+        /* Fallback/Generic Data Bus highlight for horizontal lines */
+        .highlight-bus { border-color: red !important; } 
+        
+        /* --- Token Animation Styles (The Dots) --- */
+        .token {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            z-index: 10;
+            transition: left 300ms, top 300ms;
+        }
+        .instruction-token { background-color: red; } 
+        .data-token { background-color: blue; } 
+
+        /* --- Pixel Grid Styles (Right Column) --- */
+        #pixel-column {
+            width: 45%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #pixel-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 1px;
+            width: 248px;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background-color: #fff;
+        }
+        .pixel {
+            width: 30px;
+            height: 30px;
+            background-color: #333; 
+            transition: background-color 0.1s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="control-panel">
+        <h2>SIMD Operation: One Instruction, Multiple Data</h2>
+        <div style="margin-bottom: 10px;">
+            <button class="btn-fast" onclick="startSimdAnimation(true)">▶️ Fast Execution</button>
+            <button class="btn-step" onclick="enableStepMode()">⏩ Step-by-Step Mode</button>
+            <button class="btn-reset" onclick="resetDemo()">🔄 Reset</button>
+        </div>
+        <button id="next-step-btn" class="btn-next" onclick="nextStep()">Next Step (Instruction Cycle Phase)</button>
+        <p style="margin-top: 15px; color: #555;">🔴 Instruction | 🔵 Data | Green Highlight = Parallel Execution | Red Dashed Line = Active Bus</p>
+        <p id="cycle-status" style="font-weight: bold; color: #0056b3;">System Idle</p>
+    </div>
+
+    <div id="main-container">
+        <div id="architecture-column">
+            <h3>SIMD Architecture Flow</h3>
+            <div class="unit-container">
+                <div id="bus-instruction-vertical" class="bus-line"></div>
+                <div id="bus-instruction-h1" class="bus-line"></div>
+                <div id="bus-instruction-h2" class="bus-line"></div>
+                <div id="bus-instruction-h3" class="bus-line"></div>
+                <div id="bus-data-1" class="bus-line"></div>
+                <div id="bus-data-2" class="bus-line"></div>
+                <div id="bus-data-3" class="bus-line"></div>
+                
+                <div id="CU" class="unit control-unit">Control Unit</div>
+                
+                <div class="shared-memory-container">
+                    Shared Memory
+                    <div id="MM1" class="memory-module">Memory Module - 1</div>
+                    <div id="MM2" class="memory-module">Memory Module - 2</div>
+                    <div id="MM3" class="memory-module">Memory Module - 3</div>
+                </div>
+
+                <div class="pu-group">
+                    <div id="PU1" class="unit processor-unit">Processor Unit - 1</div>
+                    <div id="PU2" class="unit processor-unit">Processor Unit - 2</div>
+                    <div id="PU3" class="unit processor-unit">Processor Unit - 3</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="pixel-column">
+            <h3>Data (Pixel Array)</h3>
+            <div id="pixel-grid">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const NUM_PIXELS = 8 * 8; 
+        const PIXEL_BRIGHTEN_COLOR = '#ff8c00'; 
+        const INITIAL_COLOR = '#333';
+        
+        let isRunning = false;
+        let isStepMode = false;
+        let cycleStep = 0; 
+        let pixelIndex = 0;
+        let fastInterval = null;
+
+        const components = {
+            CU: document.getElementById('CU'),
+            PU1: document.getElementById('PU1'), PU2: document.getElementById('PU2'), PU3: document.getElementById('PU3'),
+            MM1: document.getElementById('MM1'), MM2: document.getElementById('MM2'), MM3: document.getElementById('MM3'),
+            bus_fetch_v: document.getElementById('bus-instruction-vertical'), // Renamed for clarity, it's the vertical bus
+            bus_broadcast_v: document.getElementById('bus-instruction-vertical'), // Same bus used for broadcast
+            bus_broadcast_h1: document.getElementById('bus-instruction-h1'), 
+            bus_broadcast_h2: document.getElementById('bus-instruction-h2'),
+            bus_broadcast_h3: document.getElementById('bus-instruction-h3'),
+            bus_data_1: document.getElementById('bus-data-1'), 
+            bus_data_2: document.getElementById('bus-data-2'),
+            bus_data_3: document.getElementById('bus-data-3'),
+            next_step_btn: document.getElementById('next-step-btn'),
+            status_text: document.getElementById('cycle-status')
+        };
+
+        const PIXELS = [];
+        function initializeGrid() {
+            const PIXEL_GRID = document.getElementById('pixel-grid');
+            PIXEL_GRID.innerHTML = ''; 
+            PIXELS.length = 0;
+            for (let i = 0; i < NUM_PIXELS; i++) {
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel');
+                PIXEL_GRID.appendChild(pixel);
+                PIXELS.push(pixel);
+            }
+            PIXELS.forEach(p => p.style.backgroundColor = INITIAL_COLOR);
+        }
+        initializeGrid();
+
+        // Helper to find center coordinates of a DOM element
+        function getCenter(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2 + window.scrollY
+            };
+        }
+
+        /**
+         * Animates a token and highlights associated buses.
+         * @param {string} type - 'instruction' or 'data'
+         * @param {string} startId - ID of the starting component
+         * @param {string} endId - ID of the ending component
+         * @param {number} duration - animation duration in ms
+         * @param {function} onEnd - callback
+         * @param {string[]} busIds - array of bus IDs to highlight
+         */
+        function animateToken(type, startId, endId, duration, onEnd, busIds = []) {
+            const token = document.createElement('div');
+            token.classList.add('token', `${type}-token`);
+            document.body.appendChild(token);
+
+            // Highlight the bus lines using specific highlight classes
+            busIds.forEach(id => {
+                const comp = components[id];
+                if (comp) {
+                    if (id.includes('vertical') || id.includes('fetch')) {
+                        comp.classList.add('highlight-bus-v');
+                    } else if (id.includes('_h') || id.includes('_data_')) {
+                        comp.classList.add('highlight-bus-h');
+                    } else {
+                        comp.classList.add('highlight-bus');
+                    }
+                }
+            });
+
+            let start = getCenter(components[startId]);
+            let end = getCenter(components[endId]);
+            
+            token.style.left = `${start.x - 5}px`;
+            token.style.top = `${start.y - 5}px`;
+            // The token class has transition set in CSS
+
+            setTimeout(() => {
+                token.style.left = `${end.x - 5}px`;
+                token.style.top = `${end.y - 5}px`;
+
+                setTimeout(() => {
+                    components[endId].classList.add('highlight');
+                    if (onEnd) onEnd();
+                    token.remove();
+                    setTimeout(() => components[endId].classList.remove('highlight'), 200);
+                    
+                    // Unhighlight the bus lines
+                    busIds.forEach(id => {
+                        const comp = components[id];
+                        if (comp) {
+                            comp.classList.remove('highlight-bus-v', 'highlight-bus-h', 'highlight-bus');
+                        }
+                    });
+                }, duration);
+            }, 10);
+        }
+
+        // Function to reset all highlights and state
+        function resetDemo() {
+            if (fastInterval) clearInterval(fastInterval);
+            isRunning = false;
+            isStepMode = false;
+            cycleStep = 0;
+            pixelIndex = 0;
+            components.next_step_btn.style.display = 'none';
+            components.status_text.textContent = 'System Idle';
+            initializeGrid();
+            
+            // Remove all highlights from components and buses
+            Object.values(components).forEach(comp => {
+                if (comp) comp.classList.remove('highlight', 'highlight-bus-v', 'highlight-bus-h', 'highlight-bus');
+            });
+        }
+
+        // --- Step-by-Step Logic ---
+        function enableStepMode() {
+            resetDemo();
+            isStepMode = true;
+            isRunning = true;
+            components.next_step_btn.style.display = 'inline-block';
+            components.status_text.textContent = 'Step 0/4: Ready to Fetch Instruction';
+        }
+        
+        function nextStep() {
+            if (!isRunning || !isStepMode) return;
+            
+            if (pixelIndex >= NUM_PIXELS && cycleStep === 0) {
+                components.status_text.textContent = 'SIMD Operation Complete! Click Reset.';
+                components.next_step_btn.style.display = 'none';
+                return;
+            }
+            
+            cycleStep = (cycleStep % 4) + 1;
+
+            const baseDelay = 300; 
+            // Clear previous step highlights
+            Object.values(components).forEach(comp => comp.classList.remove('highlight', 'highlight-bus-v', 'highlight-bus-h', 'highlight-bus'));
+
+            if (cycleStep === 1) {
+                // Phase 1: INSTRUCTION FETCH (MM -> CU)
+                components.status_text.textContent = `Step 1/4: Instruction Fetch (MM -> CU)`;
+                // MM1 to CU uses the vertical instruction bus (bus_fetch_v)
+                animateToken('instruction', 'MM1', 'CU', baseDelay * 2, null, ['bus_fetch_v']); 
+            } else if (cycleStep === 2) {
+                // Phase 2: INSTRUCTION BROADCAST (CU -> PUs)
+                components.status_text.textContent = `Step 2/4: Instruction Broadcast (CU -> All PUs)`;
+                components.CU.classList.add('highlight');
+                
+                // FIX: Manually apply the vertical bus highlight for the entire duration of the broadcast
+                components.bus_broadcast_v.classList.add('highlight-bus-v');
+
+                // Animate to each PU. Only include the horizontal bus in the token's busIds, 
+                // so the vertical one stays highlighted by the manual class until removed.
+                animateToken('instruction', 'CU', 'PU1', baseDelay, null, ['bus_broadcast_h1']);
+                animateToken('instruction', 'CU', 'PU2', baseDelay, null, ['bus_broadcast_h2']);
+                animateToken('instruction', 'CU', 'PU3', baseDelay, null, ['bus_broadcast_h3']);
+                
+                // FIX: Remove CU highlight and Vertical bus highlight after all tokens have arrived/been destroyed
+                setTimeout(() => {
+                    components.CU.classList.remove('highlight');
+                    components.bus_broadcast_v.classList.remove('highlight-bus-v');
+                }, baseDelay * 2);
+
+            } else if (cycleStep === 3) {
+                // Phase 3: DATA EXECUTION (MMs -> PUs, PUs execute)
+                components.status_text.textContent = `Step 3/4: Multiple Data Fetch & Parallel Execution`;
+                
+                // MMs -> PUs
+                animateToken('data', 'MM1', 'PU1', baseDelay, null, ['bus_data_1']);
+                animateToken('data', 'MM2', 'PU2', baseDelay, null, ['bus_data_2']);
+                animateToken('data', 'MM3', 'PU3', baseDelay, null, ['bus_data_3']);
+
+                // Simulate execution and pixel update (on completion of data movement)
+                setTimeout(() => {
+                    if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                    if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                    if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                    
+                    // Highlight PUs to show simultaneous execution
+                    components.PU1.classList.add('highlight');
+                    components.PU2.classList.add('highlight');
+                    components.PU3.classList.add('highlight');
+                }, baseDelay + 50);
+
+            } else if (cycleStep === 4) {
+                // Phase 4: WRITE BACK (PUs -> MMs)
+                components.status_text.textContent = `Step 4/4: Write Back to Memory (Cycle Complete)`;
+                
+                // PUs -> MMs
+                animateToken('data', 'PU1', 'MM1', baseDelay, null, ['bus_data_1']);
+                animateToken('data', 'PU2', 'MM2', baseDelay, null, ['bus_data_2']);
+                animateToken('data', 'PU3', 'MM3', baseDelay, null, ['bus_data_3']);
+                
+                // Cycle done, reset for the next batch
+                setTimeout(() => {
+                    cycleStep = 0; 
+                    components.status_text.textContent = 'Step 0/4: Ready to Fetch Next Instruction';
+                }, baseDelay * 2); 
+            }
+        }
+
+
+        // --- Fast Execution Logic ---
+        function executeSimdStepFast() {
+            
+            if (pixelIndex >= NUM_PIXELS) {
+                clearInterval(fastInterval);
+                components.status_text.textContent = 'Fast Execution Complete.';
+                return;
+            }
+
+            // Clear all highlights quickly at the start of a cycle
+            Object.values(components).forEach(comp => comp.classList.remove('highlight', 'highlight-bus-v', 'highlight-bus-h', 'highlight-bus'));
+
+            // 1. Instruction Fetch (MM -> CU)
+            animateToken('instruction', 'MM1', 'CU', 500, null, ['bus_fetch_v']);
+            
+            // 2. Instruction Broadcast (CU -> PUs)
+            setTimeout(() => {
+                components.CU.classList.add('highlight');
+                // FIX: Manually highlight vertical bus
+                components.bus_broadcast_v.classList.add('highlight-bus-v'); 
+
+                // Animate tokens (only include horizontal buses in busIds)
+                animateToken('instruction', 'CU', 'PU1', 300, null, ['bus_broadcast_h1']);
+                animateToken('instruction', 'CU', 'PU2', 300, null, ['bus_broadcast_h2']);
+                animateToken('instruction', 'CU', 'PU3', 300, null, ['bus_broadcast_h3']);
+                
+                // FIX: Remove CU and vertical bus highlight when tokens arrive
+                setTimeout(() => {
+                    components.CU.classList.remove('highlight');
+                    components.bus_broadcast_v.classList.remove('highlight-bus-v');
+                }, 350);
+
+            }, 500);
+
+
+            // 3. Data Fetch & Execute (MMs -> PUs)
+            setTimeout(() => {
+                // PUs execute and update the pixels
+                if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                if (pixelIndex < NUM_PIXELS) PIXELS[pixelIndex++].style.backgroundColor = PIXEL_BRIGHTEN_COLOR;
+                
+                // Show data movement and highlight PUs
+                animateToken('data', 'MM1', 'PU1', 300, null, ['bus_data_1']);
+                animateToken('data', 'MM2', 'PU2', 300, null, ['bus_data_2']);
+                animateToken('data', 'MM3', 'PU3', 300, null, ['bus_data_3']);
+                components.PU1.classList.add('highlight');
+                components.PU2.classList.add('highlight');
+                components.PU3.classList.add('highlight');
+
+            }, 1000);
+            
+            // 4. Write Back (PUs -> MMs)
+            setTimeout(() => {
+                components.PU1.classList.remove('highlight');
+                components.PU2.classList.remove('highlight');
+                components.PU3.classList.remove('highlight');
+                animateToken('data', 'PU1', 'MM1', 400, null, ['bus_data_1']);
+                animateToken('data', 'PU2', 'MM2', 400, null, ['bus_data_2']);
+                animateToken('data', 'PU3', 'MM3', 400, null, ['bus_data_3']);
+            }, 1500);
+            
+            components.status_text.textContent = `Fast Mode: Processing Batch ${Math.ceil(pixelIndex / 3)}`;
+        }
+
+        function startSimdAnimation() {
+            if (isRunning) return; 
+            resetDemo();
+            isRunning = true;
+            components.status_text.textContent = 'Fast Mode: Starting...';
+            fastInterval = setInterval(executeSimdStepFast, 1500); 
+        }
+
+    </script>
+</body>
+</html>
